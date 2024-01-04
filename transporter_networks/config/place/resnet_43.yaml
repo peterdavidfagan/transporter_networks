@@ -1,6 +1,7 @@
 dim_output_features: 3
 
 query:
+  output_softmax: False
   input_projection:
     conv:
       _target_: flax.linen.Conv
@@ -282,6 +283,7 @@ query:
 
 
 key:
+  output_softmax: False
   input_projection:
   conv:
     _target_: flax.linen.Conv
