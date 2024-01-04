@@ -1,16 +1,16 @@
 [project]
-name = "rearrangement_benchmark"
+name = "transporter_networks"
 version = "0.0.0"
-description = "Simulation environments for basic manipulation tasks."
+description = "Implementation of transporter networks."
 authors = [
 	{ name = "Peter David Fagan", email = "peterdavidfagan@gmail.com" }
 ]
 readme = "README.md"
 
 [tool.poetry]
-name = "rearrangement_benchmark"
+name = "transporter_networks"
 version = "0.0.0"
-description = "Simulation environments for basic manipulation tasks."
+description = "Implementation of transporter networks."
 license = "Apache-2.0"
 authors = [
 	"Peter David Fagan <peterdavidfagan@gmail.com>"
