@@ -21,7 +21,7 @@ import hydra
 from hydra import compose, initialize
 from hydra.utils import call, instantiate
 
-from transporter import Transporter
+from transporter_networks.transporter import Transporter
 
 @struct.dataclass
 class GoalConditionedTransporter:

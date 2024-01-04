@@ -7,6 +7,7 @@ from typing import Any, Callable, Sequence, Tuple
 
 import numpy as np
 import einops as e
+from clu import metrics
 import chex
 import jax
 import jax.numpy as jnp
@@ -80,6 +81,38 @@ class Transporter:
     pick_model: train_state.TrainState
     place_model_query: train_state.TrainState
     place_model_key: train_state.TrainState
+
+@struct.dataclass
+class TransporterMetrics(metrics.Collection)
+    """Transporter Training Metrics."""
+    loss: metrics.Average.from_output("loss")
+
+class TransporterTrainState(train_state.TrainState):
+    """Transporter training state."""
+    metrics: TransporterMetrics
+
+
+def create_transporter_train_state(
+        rgbd, 
+        model, 
+        optimizer,
+        config,
+        ):
+    """Create initial training state."""
+    variables = model.init(
+        {
+
+        },
+        rgbd,
+            )
+    params = variables["params"]
+
+    return TransporterTrainState.create(
+        apply_fn=model.apply,
+        params=params,
+        tx=optimizer,
+        metrics=TransporterMetrics(),
+        )
 
 if __name__ == "__main__":
     # read network config
