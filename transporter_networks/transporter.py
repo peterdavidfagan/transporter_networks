@@ -23,7 +23,11 @@ from hydra.utils import call, instantiate
 
 
 class TransporterPick(nn.Module):
-    """Transporter pick module."""
+    """
+    Transporter pick module.
+
+    In order to understand the network structure, please refer to the model config file README for a model card.
+    """
     
     config: dict
 
@@ -74,17 +78,50 @@ class TransporterPlace(nn.Module):
     config: dict
 
     @nn.compact
-    def __call__(self, x: chex.Array, y: chex.Array) -> chex.Array:
+    def __call__(self, rgbd, train=False):
         """Forward pass."""
-        raise NotImplementedError
+        x = rgbd
+
+        # input conv projection
+        x = instantiate(self.config["input_projection"]["conv"])(x)
+        x = call(self.config["input_projection"]["pool"])(x)
+
+        for block in self.config["blocks"]:
+            # intermittently there are upsampling layers
+            if block.name=="upsample":
+                B, H, W, C = x.shape
+                x = jax.image.resize(x, shape=(B, H*2, W*2, C), method="bilinear")
+            # if not upsampling layer then we have a resnet block
+            else:
+                # original implementation has differing dimensions for layers within a block
+                # in future will attempt to use more traditional resnet block
+                mid_idx = np.median([x for x in range(block.num_blocks)]) # get index of middle block
+                
+                residual = x
+                for i in range(block.num_blocks):
+                    x = instantiate(block.resnet_block.norm)(x)
+                    x = call(block.resnet_block.activation)(x)
+                    if i==0:
+                        x = instantiate(block.resnet_block.conv, kernel_size=[1,1], padding="VALID")(x)
+                    elif i==mid_idx:
+                        x = instantiate(block.resnet_block.conv, strides=[1,1])(x) 
+                    else:
+                        x = instantiate(block.resnet_block.conv,kernel_size=[1,1], strides=[1,1], padding="VALID")(x)
+                
+                if residual.shape != x.shape:
+                    residual = instantiate(block.resnet_block.conv)(residual)
+
+                x = residual + x
+        
+        return x
 
 
 @struct.dataclass
 class Transporter:
     """Transporter model."""
     pick_model: train_state.TrainState
-    place_model: train_state.TrainState
-
+    place_model_query: train_state.TrainState
+    place_model_key: train_state.TrainState
 
 if __name__ == "__main__":
     # read network config
@@ -96,11 +133,16 @@ if __name__ == "__main__":
     rgbd = jnp.ones((1, 480, 640, 4))
     print("Input shape: ", rgbd.shape)
 
-    # try to instantiate model
+    # try to instantiate pick model
     pick_model = TransporterPick(config=TRANSPORTER_CONFIG["pick"])
     key = random.PRNGKey(0)
     params = pick_model.init(key, rgbd)
-    dummy_output = pick_model.apply(params, rgbd, train=True)
     dummy_output = pick_model.apply(params, rgbd, train=False)
-    print("Output shape: ", dummy_output.shape)
+    print("Pick output shape: ", dummy_output.shape)
+
+    # try to instantiate place model
+    place_model = TransporterPlace(config=TRANSPORTER_CONFIG["place"]["query"])
+    params = place_model.init(key, rgbd)
+    dummy_output = place_model.apply(params, rgbd, train=False)
+    print("Place output shape: ", dummy_output.shape)
 

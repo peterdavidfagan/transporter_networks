@@ -1,0 +1,562 @@
+dim_output_features: 3
+
+query:
+  input_projection:
+    conv:
+      _target_: flax.linen.Conv
+      features: 64
+      kernel_size: [3,3]
+      strides: [1,1]
+      padding: SAME
+      use_bias: True
+      dtype: ${dtype}
+      param_dtype: ${param_dtype}
+      kernel_init:
+        _target_: flax.linen.initializers.he_normal
+        dtype: ${param_dtype}
+      bias_init:
+        _target_: flax.linen.initializers.normal
+        dtype: ${param_dtype}
+
+    pool:
+      _partial_: true
+      _target_: flax.linen.max_pool
+      window_shape: [3,3]
+      strides: [1,1]
+      padding: SAME
+
+  blocks:
+    - name: block1
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 64
+          kernel_size: [3,3]
+          strides: [1,1]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+    
+    - name: block2
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 128
+          kernel_size: [3,3]
+          strides: [2,2]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+    
+    - name: block3
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 256
+          kernel_size: [3,3]
+          strides: [2,2]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+
+    - name: block4
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 512
+          kernel_size: [3,3]
+          strides: [2,2]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+    
+    - name: block5
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 256
+          kernel_size: [3,3]
+          strides: [1,1]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+   
+    - name: upsample
+
+    - name: block6
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 128
+          kernel_size: [3,3]
+          strides: [1,1]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+    
+    - name: upsample
+    
+    - name: block7
+      num_blocks: 3
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: 64
+          kernel_size: [3,3]
+          strides: [1,1]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+    
+    - name: upsample
+    
+    - name: block8
+      num_blocks: 1
+
+      resnet_block:
+        norm:
+          _target_: flax.linen.GroupNorm
+          num_groups: 32
+          epsilon: 1e-6
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+
+        activation:
+          _partial_: true
+          _target_: flax.linen.gelu
+
+        conv:
+          _target_: flax.linen.Conv
+          features: ${place.dim_output_features}
+          kernel_size: [3,3]
+          strides: [1,1]
+          padding: SAME
+          use_bias: True
+          dtype: ${dtype}
+          param_dtype: ${param_dtype}
+          kernel_init:
+            _target_: flax.linen.initializers.he_normal
+            dtype: ${param_dtype}
+          bias_init:
+            _target_: flax.linen.initializers.normal
+            dtype: ${param_dtype}
+
+
+key:
+  input_projection:
+  conv:
+    _target_: flax.linen.Conv
+    features: 64
+    kernel_size: [3,3]
+    strides: [1,1]
+    padding: SAME
+    use_bias: True
+    dtype: ${dtype}
+    param_dtype: ${param_dtype}
+    kernel_init:
+      _target_: flax.linen.initializers.he_normal
+      dtype: ${param_dtype}
+    bias_init:
+      _target_: flax.linen.initializers.normal
+      dtype: ${param_dtype}
+
+  pool:
+    _partial_: true
+    _target_: flax.linen.max_pool
+    window_shape: [3,3]
+    strides: [1,1]
+    padding: SAME
+
+blocks:
+  - name: block1
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 64
+        kernel_size: [3,3]
+        strides: [1,1]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+  
+  - name: block2
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 128
+        kernel_size: [3,3]
+        strides: [2,2]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+  
+  - name: block3
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 256
+        kernel_size: [3,3]
+        strides: [2,2]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+
+  - name: block4
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 512
+        kernel_size: [3,3]
+        strides: [2,2]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+  
+  - name: block5
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 256
+        kernel_size: [3,3]
+        strides: [1,1]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+ 
+  - name: upsample
+
+  - name: block6
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 128
+        kernel_size: [3,3]
+        strides: [1,1]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+  
+  - name: upsample
+  
+  - name: block7
+    num_blocks: 3
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: 64
+        kernel_size: [3,3]
+        strides: [1,1]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
+  
+  - name: upsample
+  
+  - name: block8
+    num_blocks: 1
+
+    resnet_block:
+      norm:
+        _target_: flax.linen.GroupNorm
+        num_groups: 32
+        epsilon: 1e-6
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+
+      activation:
+        _partial_: true
+        _target_: flax.linen.gelu
+
+      conv:
+        _target_: flax.linen.Conv
+        features: ${place.dim_output_features}
+        kernel_size: [3,3]
+        strides: [1,1]
+        padding: SAME
+        use_bias: True
+        dtype: ${dtype}
+        param_dtype: ${param_dtype}
+        kernel_init:
+          _target_: flax.linen.initializers.he_normal
+          dtype: ${param_dtype}
+        bias_init:
+          _target_: flax.linen.initializers.normal
+          dtype: ${param_dtype}
