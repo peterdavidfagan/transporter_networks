@@ -21,20 +21,12 @@ class ResNetV2Block(nn.Module):
 
         # resnetv2block
         residual = x
-        
         for _ in range(self.config.num_blocks):
             x = instantiate(self.config.resnet_block.norm)(x)
             x = call(self.config.resnet_block.activation)(x)
             x = instantiate(self.config.resnet_block.conv)(x)
-
         if residual.shape != x.shape:
             residual = instantiate(self.config.resnet_block.conv)(residual)
   
-        x = x+residual
-        
-        #flatten output
-        x = jnp.reshape(x, (*x.shape[:3], -1))
-        x = instantiate(self.config.output_projection.dense)(x)
-
-        return x
+        return x+residual
 
