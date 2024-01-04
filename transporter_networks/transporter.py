@@ -9,6 +9,7 @@ import numpy as np
 import einops as e
 from clu import metrics
 import chex
+import optax
 import jax
 import jax.numpy as jnp
 import flax.linen as nn
@@ -93,15 +94,15 @@ class TransporterTrainState(train_state.TrainState):
 
 
 def create_transporter_train_state(
-        rgbd, 
-        model, 
+        rgbd,
+        model,
+        model_key,
         optimizer,
-        config,
         ):
     """Create initial training state."""
     variables = model.init(
         {
-
+            "params": model_key,
         },
         rgbd,
             )
@@ -111,7 +112,7 @@ def create_transporter_train_state(
         apply_fn=model.apply,
         params=params,
         tx=optimizer,
-        metrics=TransporterMetrics(),
+        metrics=TransporterMetrics.empty(),
         )
 
 if __name__ == "__main__":
@@ -136,4 +137,37 @@ if __name__ == "__main__":
     params = place_model.init(key, rgbd)
     dummy_output = place_model.apply(params, rgbd, train=False)
     print("Place output shape: ", dummy_output.shape)
+    
 
+    # try to instantiate train state for all models
+    key1, key2, key3 = random.split(key, 3)
+    optimizer1 = optax.adam(1e-3)
+    optimizer2 = optax.adam(1e-3)
+    optimizer3 = optax.adam(1e-3)
+    
+    pick_model_state = create_transporter_train_state(
+        rgbd,
+        pick_model,
+        key1,
+        optimizer1,
+        )
+    
+    place_model_query_state = create_transporter_train_state(
+        rgbd,
+        place_model,
+        key2,
+        optimizer2,
+        )
+    
+    place_model_key_state = create_transporter_train_state(
+        rgbd,
+        place_model,
+        key3,
+        optimizer3,
+        )
+    
+    transporter_model = Transporter(
+        pick_model=pick_model_state,
+        place_model_query=place_model_query_state,
+        place_model_key=place_model_key_state,
+        )
