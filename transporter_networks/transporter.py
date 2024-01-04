@@ -83,7 +83,7 @@ class Transporter:
     place_model_key: train_state.TrainState
 
 @struct.dataclass
-class TransporterMetrics(metrics.Collection)
+class TransporterMetrics(metrics.Collection):
     """Transporter Training Metrics."""
     loss: metrics.Average.from_output("loss")
 
