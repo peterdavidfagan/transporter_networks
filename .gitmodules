@@ -1,0 +1,3 @@
+[submodule "transporter_networks/CommonLoopUtils"]
+	path = transporter_networks/CommonLoopUtils
+	url = git@github.com:google/CommonLoopUtils.git

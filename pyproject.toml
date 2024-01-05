@@ -22,35 +22,17 @@ py-modules=["transporter_networks"]
 
 [tool.poetry.dependencies]
 python = "3.10.6"
-numpy = "^1.16.0"
-mujoco = "3.1.1"
-dm-control = "1.0.16"
-ikpy = "3.3.4"
+numpy = "^1.2.0"
 pillow = "10.0.0"
 jax = "^0.4.14"
 jaxlib = "^0.4.14"
 matplotlib = "^3.7.2"
 hydra-core = "^1.3.2"
-catkin-pkg = "^1.0.0"
-colcon-core = "^0.14.0"
-colcon-common-extensions = "^0.3.0"
-colcon-mixin = "^0.2.3"
 pytest = "^7.4.2"
 lark = "^1.1.7"
-profilehooks = "^1.12.0"
-notebook = "^7.0.6"
-plotly = "^5.18.0"
-pandas = "^2.1.3"
-ipywidgets = "^8.1.1"
-jupyterlab = "^4.0.9"
 inflect = "^7.0.0"
-envlogger = {version="1.1", extras=["tfds"]}
-rlds = "0.1.8"
-tensorflow-cpu = "2.13.0"
-tensorflow-datasets = "4.9.2"
-wandb = "^0.16.1"
 einops = "^0.7.0"
-clu = "^0.0.10"
+clu = {path="./transporter_networks/CommonLoopUtils", develop=true}
 
 
 [tool.black]
