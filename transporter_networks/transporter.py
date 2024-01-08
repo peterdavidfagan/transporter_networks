@@ -138,7 +138,7 @@ def pick_train_step(
 
     # TODO: update metrics
 
-    return state, loss
+    return state
 
 def compute_place_loss():
     """Compute place loss."""
