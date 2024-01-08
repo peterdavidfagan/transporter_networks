@@ -115,6 +115,35 @@ def create_transporter_train_state(
         metrics=TransporterMetrics.empty(),
         )
 
+def pick_train_step(
+        state,
+        rgbd, 
+        target_pixel_ids,
+        ):
+    """Train step for pick model."""
+
+    def compute_pick_loss(params):
+        """Compute pick loss."""
+        q_vals = state.apply_fn({"params": params}, rgbd).reshape(rgbd.shape[0], -1)
+        target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
+        loss = optax.softmax_cross_entropy(logits=q_vals, labels=target).mean()
+        return loss
+
+    # compute gradients
+    grad_fn = jax.grad(compute_pick_loss)
+    grads = grad_fn(state.params)
+
+    # update state
+    state = state.apply_gradients(grads=grads)
+
+    # TODO: update metrics
+
+    return state, loss
+
+def compute_place_loss():
+    """Compute place loss."""
+    pass
+
 if __name__ == "__main__":
     # read network config
     hydra.core.global_hydra.GlobalHydra.instance().clear()

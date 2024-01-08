@@ -22,7 +22,7 @@ py-modules=["transporter_networks"]
 
 [tool.poetry.dependencies]
 python = "3.10.6"
-numpy = "^1.2.0"
+numpy = "^1.16.0"
 pillow = "10.0.0"
 jax = "^0.4.14"
 jaxlib = "^0.4.14"
