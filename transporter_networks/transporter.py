@@ -60,7 +60,7 @@ class TransporterNetwork(nn.Module):
                     if i==0:
                         x = instantiate(block.resnet_block.conv, kernel_size=[1,1], padding="VALID")(x)
                     elif i==mid_idx:
-                        x = instantiate(block.resnet_block.conv, strides=[1,1])(x) 
+                        x = instantiate(block.resnet_block.conv, strides=[1,1])(x)
                     else:
                         x = instantiate(block.resnet_block.conv,kernel_size=[1,1], strides=[1,1], padding="VALID")(x)
                 
@@ -71,7 +71,7 @@ class TransporterNetwork(nn.Module):
         
         if self.config.output_softmax:
             x = jax.nn.softmax(x, axis=-1)
-            x = e.rearrange(x, "b h w c -> b h (w c)")
+            x = e.rearrange(x, "b h w c -> b h (w c)") # squeeze last dim
 
         return x
 
@@ -140,9 +140,51 @@ def pick_train_step(
 
     return state
 
-def compute_place_loss():
-    """Compute place loss."""
-    pass
+def place_train_step(
+        query_state,
+        key_state,
+        rgbd,
+        rgbd_crop,
+        target_pixel_ids,
+        ):
+
+    def compute_place_loss(query_params, key_params):
+        """Compute place loss."""
+        query_q_vals = query_state.apply_fn({"params": query_params}, rgbd)
+        key_q_vals = key_state.apply_fn({"params": key_params}, rgbd_crop)
+        jax.debug.print("query_q_vals: {shape}", shape=query_q_vals.shape)
+        jax.debug.print("key_q_vals: {shape}", shape=key_q_vals.shape)
+
+        # convolve key_q_vals with query_q_vals
+        #query_q_vals = e.rearrange(query_q_vals, "b h w c -> b c h w")
+        dn = jax.lax.conv_dimension_numbers(query_q_vals.shape, key_q_vals.shape, ('NHWC', 'OHWI', 'NHWC'))
+        q_vals = jax.lax.conv_general_dilated(
+            query_q_vals,
+            key_q_vals,
+            (1, 1),
+            "SAME",
+            (1, 1),
+            (1, 1),
+            dn)
+        jax.debug.print("q_vals: {shape}", shape=q_vals.shape)
+        # for now take mean over channels
+        q_vals = q_vals.mean(axis=-1)
+        jax.debug.print("q_vals: {shape}", shape=q_vals.shape)
+        q_vals = e.rearrange(q_vals, "b h w -> b (h w)")
+        
+        target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
+        loss = optax.softmax_cross_entropy(logits=q_vals, labels=target).mean()
+        return loss
+
+    # compute gradients
+    grad_fn = jax.grad(compute_place_loss, argnums=(0, 1))
+    query_grads, key_grads = grad_fn(query_state.params, key_state.params)
+
+    # update state
+    query_state = query_state.apply_gradients(grads=query_grads)
+    key_state = key_state.apply_gradients(grads=key_grads)
+
+    return query_state, key_state
 
 if __name__ == "__main__":
     # read network config
