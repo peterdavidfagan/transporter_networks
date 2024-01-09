@@ -79,9 +79,9 @@ class TransporterNetwork(nn.Module):
 @struct.dataclass
 class Transporter:
     """Transporter model."""
-    pick_model: train_state.TrainState
-    place_model_query: train_state.TrainState
-    place_model_key: train_state.TrainState
+    pick_model_state: train_state.TrainState
+    place_model_query_state: train_state.TrainState
+    place_model_key_state: train_state.TrainState
 
 @struct.dataclass
 class TransporterMetrics(metrics.Collection):
@@ -173,6 +173,7 @@ def place_train_step(
         q_vals = e.rearrange(q_vals, "b h w -> b (h w)")
         
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
+        jax.debug.print("target: {shape}", shape=target.shape)
         loss = optax.softmax_cross_entropy(logits=q_vals, labels=target).mean()
         return loss
 
