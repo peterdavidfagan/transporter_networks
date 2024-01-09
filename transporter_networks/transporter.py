@@ -130,15 +130,15 @@ def pick_train_step(
         return loss
 
     # compute gradients
-    grad_fn = jax.grad(compute_pick_loss)
-    grads = grad_fn(state.params)
+    grad_fn = jax.value_and_grad(compute_pick_loss)
+    loss, grads = grad_fn(state.params)
 
     # update state
     state = state.apply_gradients(grads=grads)
 
     # TODO: update metrics
 
-    return state
+    return state, loss
 
 def place_train_step(
         query_state,
@@ -178,14 +178,14 @@ def place_train_step(
         return loss
 
     # compute gradients
-    grad_fn = jax.grad(compute_place_loss, argnums=(0, 1))
-    query_grads, key_grads = grad_fn(query_state.params, key_state.params)
+    grad_fn = jax.value_and_grad(compute_place_loss, argnums=(0, 1))
+    loss, grads = grad_fn(query_state.params, key_state.params)
 
     # update state
-    query_state = query_state.apply_gradients(grads=query_grads)
-    key_state = key_state.apply_gradients(grads=key_grads)
+    query_state = query_state.apply_gradients(grads=grads[0])
+    key_state = key_state.apply_gradients(grads=grads[1])
 
-    return query_state, key_state
+    return query_state, key_state, loss
 
 if __name__ == "__main__":
     # read network config
