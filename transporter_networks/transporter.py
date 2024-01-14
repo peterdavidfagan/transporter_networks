@@ -43,35 +43,43 @@ class TransporterNetwork(nn.Module):
         x = call(self.config["input_projection"]["pool"])(x)
 
         for block in self.config["blocks"]:
-            # intermittently there are upsampling layers
+            # either apply upsampling block or resnet block
             if block.name=="upsample":
                 B, H, W, C = x.shape
                 x = jax.image.resize(x, shape=(B, H*2, W*2, C), method="bilinear")
-            # if not upsampling layer then we have a resnet block
             else:
-                # original implementation has differing dimensions for layers within a block
-                # in future will attempt to use more traditional resnet block
+                residual = x
+                # original implementation has differing dimensions for layers within a given resnet block
+                # for instance only the middle conv layer has a kernel size different from (1,1)
+                # similarly stride is (1,1) except for first conv layer
                 mid_idx = np.median([x for x in range(block.num_blocks)]) # get index of middle block
                 
-                residual = x
                 for i in range(block.num_blocks):
-                    x = instantiate(block.resnet_block.norm)(x)
-                    x = call(block.resnet_block.activation)(x)
+                    
+                    # apply convolution with different params depending on position in block
                     if i==0:
                         x = instantiate(block.resnet_block.conv, kernel_size=[1,1], padding="VALID")(x)
                     elif i==mid_idx:
                         x = instantiate(block.resnet_block.conv, strides=[1,1])(x)
                     else:
-                        x = instantiate(block.resnet_block.conv,kernel_size=[1,1], strides=[1,1], padding="VALID")(x)
-                
-                if residual.shape != x.shape:
-                    residual = instantiate(block.resnet_block.conv)(residual)
+                        x = instantiate(block.resnet_block.conv, kernel_size=[1,1], strides=[1,1], padding="VALID")(x)
+                    
+                    # apply norm
+                    x = instantiate(block.resnet_block.norm, use_running_average=not train)(x)
+                    
+                    # if last block add residual
+                    if i==block.num_blocks-1:
+                        if residual.shape != x.shape: # check if residual needs to be projected
+                            residual = instantiate(block.resnet_block.conv)(residual)
+                        x = residual + x
 
-                x = residual + x
+                    x = call(block.resnet_block.activation)(x)
         
+        
+        # compute softmax over image output
         if self.config.output_softmax:
+            x = e.rearrange(x, "b h w c -> b (h w c)") # flatten spatial dims
             x = jax.nn.softmax(x, axis=-1)
-            x = e.rearrange(x, "b h w c -> b h (w c)") # squeeze last dim
 
         return x
 
@@ -90,6 +98,7 @@ class TransporterMetrics(metrics.Collection):
 
 class TransporterTrainState(train_state.TrainState):
     """Transporter training state."""
+    batch_stats: Any
     metrics: TransporterMetrics
 
 
@@ -105,12 +114,15 @@ def create_transporter_train_state(
             "params": model_key,
         },
         rgbd,
+        train=False,
             )
     params = variables["params"]
+    batch_stats = variables["batch_stats"]
 
     return TransporterTrainState.create(
         apply_fn=model.apply,
         params=params,
+        batch_stats=batch_stats,
         tx=optimizer,
         metrics=TransporterMetrics.empty(),
         )
@@ -124,19 +136,28 @@ def pick_train_step(
 
     def compute_pick_loss(params):
         """Compute pick loss."""
-        q_vals = state.apply_fn({"params": params}, rgbd).reshape(rgbd.shape[0], -1)
+        q_vals, updates = state.apply_fn({"params": params, "batch_stats": state.batch_stats},
+                rgbd,
+                train=True,
+                mutable=["batch_stats"],
+                )
+
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
-        loss = optax.softmax_cross_entropy(logits=q_vals, labels=target).mean()
-        return loss
+        loss = -jnp.sum(jnp.multiply(target, jnp.log(q_vals+1e-8)), axis=-1).mean() # add near zero to avoid log(0)
+        
+        return loss, (updates)
 
-    # compute gradients
-    grad_fn = jax.value_and_grad(compute_pick_loss)
-    loss, grads = grad_fn(state.params)
-
-    # update state
+    # compute and apply gradients
+    grad_fn = jax.value_and_grad(compute_pick_loss, has_aux=True)
+    (loss, (updates)), grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
 
-    # TODO: update metrics
+    # update batch stats
+    state = state.replace(batch_stats=updates["batch_stats"])
+
+    # update metrics
+    metric_updates = state.metrics.single_from_model_output(loss=loss)
+    state = state.replace(metrics = state.metrics.merge(metric_updates))
 
     return state, loss
 
@@ -152,8 +173,6 @@ def place_train_step(
         """Compute place loss."""
         query_q_vals = query_state.apply_fn({"params": query_params}, rgbd)
         key_q_vals = key_state.apply_fn({"params": key_params}, rgbd_crop)
-        jax.debug.print("query_q_vals: {shape}", shape=query_q_vals.shape)
-        jax.debug.print("key_q_vals: {shape}", shape=key_q_vals.shape)
 
         # convolve key_q_vals with query_q_vals
         #query_q_vals = e.rearrange(query_q_vals, "b h w c -> b c h w")
@@ -166,14 +185,11 @@ def place_train_step(
             (1, 1),
             (1, 1),
             dn)
-        jax.debug.print("q_vals: {shape}", shape=q_vals.shape)
         # for now take mean over channels
         q_vals = q_vals.mean(axis=-1)
-        jax.debug.print("q_vals: {shape}", shape=q_vals.shape)
         q_vals = e.rearrange(q_vals, "b h w -> b (h w)")
         
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
-        jax.debug.print("target: {shape}", shape=target.shape)
         loss = optax.softmax_cross_entropy(logits=q_vals, labels=target).mean()
         return loss
 
@@ -184,6 +200,10 @@ def place_train_step(
     # update state
     query_state = query_state.apply_gradients(grads=grads[0])
     key_state = key_state.apply_gradients(grads=grads[1])
+
+    # update metrics (TODO: consider merging place components, currently storing metrics on query state)
+    metric_updates = query_state.metrics.single_from_model_output(loss=loss)
+    query_state = query_state.replace(metrics = query_state.metrics.merge(metric_updates))
 
     return query_state, key_state, loss
 
