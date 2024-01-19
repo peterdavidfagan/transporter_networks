@@ -1,4 +1,4 @@
-"SAME"ce_loss"Implementation of original transporter model."""
+"Implementation of original transporter model."""
 
 import dataclasses
 import warnings
@@ -72,23 +72,15 @@ class TransporterNetwork(nn.Module):
                     if i==block.num_blocks-1:
                         if residual.shape != x.shape: # check if residual needs to be projected
                             residual = instantiate(block.resnet_block.conv)(residual)
-                            #jax.debug.print("residual shape: {}", residual.shape)
-                            #jax.debug.print("X shape: {}", x.shape)
-                            #jax.debug.print("residual: {}", jnp.unique(residual))
                         x += residual
                     
                     if idx != len(self.config["blocks"])-1:
                         x = call(block.resnet_block.activation)(x)
-        
-        #jax.debug.print("pick feature output shape: {}", x.shape)
-        #jax.debug.print("pick feature output: {}", jnp.unique(x))
 
         # compute softmax over image output
         if self.config.output_softmax:
             x = e.rearrange(x, "b h w c -> b (h w c)") # flatten spatial dims
             x = jax.nn.softmax(x, axis=-1)
-        
-        #jax.debug.print("pick network output: {}", jnp.unique(x))
 
         return x
 
@@ -151,7 +143,9 @@ class TransporterPlaceNetwork(nn.Module):
                         rgbd_crop_features = instantiate(block.resnet_block.conv, strides=[1,1])(rgbd_crop_features)
                     else:
                         rgbd_crop_features = instantiate(block.resnet_block.conv, kernel_size=[1,1], strides=[1,1], padding="VALID")(rgbd_crop_features)
-                    rgbd_crop_features = instantiate(block.resnet_block.norm, use_running_average=not train)(rgbd_crop_features)
+                    
+                    if self.config.use_batchnorm:
+                        rgbd_crop_features = instantiate(block.resnet_block.norm, use_running_average=not train)(rgbd_crop_features)
                     if i==block.num_blocks-1:
                         if residual.shape != rgbd_crop_features.shape: # check if residual needs to be projected
                             residual = instantiate(block.resnet_block.conv)(residual)
@@ -161,35 +155,25 @@ class TransporterPlaceNetwork(nn.Module):
                         rgbd_crop_features = call(block.resnet_block.activation)(rgbd_crop_features)
         
 
-        # cross correlate features and compute softmax over image
-        #q_vals = jax.vmap(jsp.signal.convolve, in_axes=(0, 0, None, None), out_axes=0)(rgbd_features, rgbd_crop_features, "same", "direct")
+        rgbd_features = e.rearrange(rgbd_features, "b h w c -> b 1 h w c")
+        rgbd_crop_features = e.rearrange(rgbd_crop_features, "b h w c -> b 1 h w c")
+        dn = jax.lax.conv_dimension_numbers(rgbd_features.shape[1:], rgbd_crop_features.shape[1:], ('NHWC', 'OHWI', 'NHWC'))
+        q_vals = jax.vmap(jax.lax.conv_general_dilated, (0, 0, None, None, None, None, None), 0)(
+            rgbd_features,
+            rgbd_crop_features,
+            (1, 1),
+            "SAME",
+            None,
+            None,
+            dn)
+        q_vals = e.rearrange(q_vals, "b d h w c -> b (d h w c)") # flatten spatial dims
         
-
-        # TODO: debug generalised convolutions for performing cross correlation
-        #b, h, w, c = rgbd_features.shape
-        #jax.debug.print("rgbd_features: {}", rgbd_features.shape)
-        #jax.debug.print("rgbd_crop_features: {}", rgbd_crop_features.shape)
-        #rgbd_features = e.rearrange(rgbd_features, "b h w c -> b 1 h w c")
-        #rgbd_crop_features = e.rearrange(rgbd_crop_features, "b h w c -> b 1 h w c")
-        #dn = jax.lax.conv_dimension_numbers(rgbd_features.shape[1:], rgbd_crop_features.shape[1:], ('NHWC', 'OHWI', 'NHWC'))
-        #jax.debug.print("dn: {}", dn)
-        #q_vals = jax.vmap(jax.lax.conv_general_dilated, (0, 0, None, None, None, None, None), 0)(
-        #    rgbd_features,
-        #    rgbd_crop_features,
-        #    (1, 1),
-        #    "SAME",
-        #    (1, 1),
-        #    (1, 1),
-        #    dn)
-        #jax.debug.print("q_vals: {}", q_vals)
-    
-        # compute softmax over image output
-        #q_vals = e.rearrange(q_vals, "b d h w c -> b (d h w c)") # flatten spatial dims
-        #jax.debug.print("q_vals: {}", q_vals.shape)
-        #jax.debug.print("q_vals: {}", q_vals)
-        #q_vals = jax.nn.softmax(q_vals, axis=-1)
-        return (rgbd_features, rgbd_crop_features)
-
+        # normalize q_vals before softmax
+        q_vals -= jnp.mean(q_vals, axis=-1, keepdims=True)
+        q_vals /= jnp.std(q_vals, axis=-1, keepdims=True)
+        q_vals = jax.nn.softmax(q_vals, axis=-1)
+        
+        return q_vals
 
 
 @struct.dataclass
@@ -251,12 +235,12 @@ def create_transporter_place_train_state(
         train=False,
             )
     params = variables["params"]
-    batch_stats = variables["batch_stats"]
+    #batch_stats = variables["batch_stats"]
 
     return TransporterTrainState.create(
         apply_fn=model.apply,
         params=params,
-        batch_stats=batch_stats,
+        batch_stats=None,#batch_stats,
         tx=optimizer,
         metrics=TransporterMetrics.empty(),
         )
@@ -303,43 +287,26 @@ def place_train_step(
 
     def compute_place_loss(params):
         """Compute place loss."""
-        (rgbd_features, rgbd_crop_features), updates = state.apply_fn({"params": params, "batch_stats": state.batch_stats}, 
+        q_vals = state.apply_fn({"params": params},# "batch_stats": state.batch_stats}, 
                 rgbd,
                 rgbd_crop,
                 train=True,
-                mutable=["batch_stats"],
+                #mutable=["batch_stats"],
                 )
         
-        # cross correlate features and take softmax
-        rgbd_features = e.rearrange(rgbd_features, "b h w c -> b 1 h w c")
-        rgbd_crop_features = e.rearrange(rgbd_crop_features, "b h w c -> b 1 h w c")
-        dn = jax.lax.conv_dimension_numbers(rgbd_features.shape[1:], rgbd_crop_features.shape[1:], ('NHWC', 'OHWI', 'NHWC'))
-        q_vals = jax.vmap(jax.lax.conv_general_dilated, (0, 0, None, None, None, None, None), 0)(
-            rgbd_features,
-            rgbd_crop_features,
-            (1, 1),
-            "VALID",
-            (1, 1),
-            (1, 1),
-            dn)
-        q_vals = e.rearrange(q_vals, "b d h w c -> b (d h w c)") # flatten spatial dims
-        q_vals = jax.nn.softmax(q_vals, axis=-1)
-    
         # compute softmax over image output
-        jax.debug.print("target_pixel_ids: {}", target_pixel_ids)
-        jax.debug.print("predicted pixel ids: {}", jnp.argmax(q_vals, axis=-1))
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
         loss = -jnp.sum(jnp.multiply(target, jnp.log(q_vals+1e-8)), axis=-1).mean() # add near zero to avoid log(0)
         
-        return loss, (updates)
+        return loss 
 
     # compute and apply gradients
-    grad_fn = jax.value_and_grad(compute_place_loss, has_aux=True)
-    (loss, (updates)), grads = grad_fn(state.params)
+    grad_fn = jax.value_and_grad(compute_place_loss, has_aux=False)
+    loss, grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
 
     # update batch stats
-    state = state.replace(batch_stats=updates["batch_stats"])
+    #state = state.replace(batch_stats=updates["batch_stats"])
 
     # update metrics (TODO: consider merging place components, currently storing metrics on query state)
     metric_updates = state.metrics.single_from_model_output(loss=loss)
