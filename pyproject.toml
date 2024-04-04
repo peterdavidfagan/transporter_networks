@@ -24,7 +24,8 @@ py-modules=["transporter_networks"]
 python = "3.10.6"
 numpy = "^1.16.0"
 pillow = "10.0.0"
-jaxlib = {extras=["cuda12_pip"], url = "https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.23+cuda12.cudnn89-cp310-cp310-manylinux2014_x86_64.whl"}
+jax = "^0.4.26"
+jaxlib = {extras=["cuda12_pip"], url = "https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.26+cuda12.cudnn89-cp310-cp310-manylinux2014_x86_64.whl"}
 flax = "^0.8.2"
 optax = "^0.1.7"
 matplotlib = "^3.7.2"
