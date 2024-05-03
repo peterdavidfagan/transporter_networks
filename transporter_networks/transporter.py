@@ -66,7 +66,7 @@ class TransporterNetwork(nn.Module):
                         x = instantiate(block.resnet_block.conv, kernel_size=[1,1], strides=[1,1], padding="VALID")(x)
                     
                     # apply norm
-                    x = instantiate(block.resnet_block.norm, use_running_average=not train)(x)
+                    # x = instantiate(block.resnet_block.norm, use_running_average=not train)(x)
                     
                     # if last layer in block add residual
                     if i==block.num_blocks-1:
@@ -79,8 +79,13 @@ class TransporterNetwork(nn.Module):
 
         # compute softmax over image output
         if self.config.output_softmax:
-            x = e.rearrange(x, "b h w c -> b (h w c)") # flatten spatial dims
-            x = jax.nn.softmax(x, axis=-1)
+            q_vals = e.rearrange(x, "b h w c -> b (h w c)") # flatten spatial dims
+            
+            # normalize q_vals before softmax
+            q_vals -= jnp.mean(q_vals, axis=-1, keepdims=True)
+            q_vals /= jnp.std(q_vals, axis=-1, keepdims=True)
+            
+            x = jax.nn.softmax(q_vals, axis=-1)
 
         return x
 
@@ -208,12 +213,12 @@ def create_transporter_train_state(
         train=False,
             )
     params = variables["params"]
-    batch_stats = variables["batch_stats"]
+    #batch_stats = variables["batch_stats"]
 
     return TransporterTrainState.create(
         apply_fn=model.apply,
         params=params,
-        batch_stats=batch_stats,
+        batch_stats=None,
         tx=optimizer,
         metrics=TransporterMetrics.empty(),
         )
@@ -254,23 +259,23 @@ def pick_train_step(
 
     def compute_pick_loss(params):
         """Compute pick loss."""
-        q_vals, updates = state.apply_fn({"params": params, "batch_stats": state.batch_stats},
+        q_vals = state.apply_fn({"params": params},
                 rgbd,
                 train=True,
-                mutable=["batch_stats"],
+                #mutable=["batch_stats"],
                 )
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
         loss = -jnp.sum(jnp.multiply(target, jnp.log(q_vals+1e-8)), axis=-1).mean() # add near zero to avoid log(0)
         
-        return loss, (updates)
+        return loss
 
     # compute and apply gradients
-    grad_fn = jax.value_and_grad(compute_pick_loss, has_aux=True)
-    (loss, (updates)), grads = grad_fn(state.params)
+    grad_fn = jax.value_and_grad(compute_pick_loss, has_aux=False)
+    loss, grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
 
     # update batch stats
-    state = state.replace(batch_stats=updates["batch_stats"])
+    #state = state.replace(batch_stats=updates["batch_stats"])
 
     # update metrics
     metric_updates = state.metrics.single_from_model_output(loss=loss)
