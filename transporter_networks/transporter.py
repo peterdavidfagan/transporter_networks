@@ -191,6 +191,7 @@ class Transporter:
 class TransporterMetrics(metrics.Collection):
     """Transporter Training Metrics."""
     loss: metrics.Average.from_output("loss")
+    success_rate: metrics.Average.from_output("success_rate")
 
 class TransporterTrainState(train_state.TrainState):
     """Transporter training state."""
@@ -266,22 +267,24 @@ def pick_train_step(
                 )
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
         loss = -jnp.sum(jnp.multiply(target, jnp.log(q_vals+1e-8)), axis=-1).mean() # add near zero to avoid log(0)
+        predicted_idx = jnp.argmax(q_vals, axis=-1)
+        success_rate = jnp.sum(predicted_idx == target_pixel_ids) / target_pixel_ids.size
         
-        return loss
+        return loss, success_rate
 
     # compute and apply gradients
-    grad_fn = jax.value_and_grad(compute_pick_loss, has_aux=False)
-    loss, grads = grad_fn(state.params)
+    grad_fn = jax.value_and_grad(compute_pick_loss, has_aux=True)
+    (loss, success_rate), grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
 
     # update batch stats
     #state = state.replace(batch_stats=updates["batch_stats"])
 
     # update metrics
-    metric_updates = state.metrics.single_from_model_output(loss=loss)
+    metric_updates = state.metrics.single_from_model_output(loss=loss, success_rate=success_rate)
     state = state.replace(metrics = state.metrics.merge(metric_updates))
 
-    return state, loss
+    return state, loss, success_rate
 
 def place_train_step(
         state,
@@ -302,22 +305,24 @@ def place_train_step(
         # compute softmax over image output
         target = jax.nn.one_hot(target_pixel_ids, num_classes=q_vals.shape[-1])
         loss = -jnp.sum(jnp.multiply(target, jnp.log(q_vals+1e-8)), axis=-1).mean() # add near zero to avoid log(0)
+        predicted_idx = jnp.argmax(q_vals, axis=-1)
+        success_rate = jnp.sum(predicted_idx == target_pixel_ids) / target_pixel_ids.size
         
-        return loss 
+        return loss , success_rate
 
     # compute and apply gradients
-    grad_fn = jax.value_and_grad(compute_place_loss, has_aux=False)
-    loss, grads = grad_fn(state.params)
+    grad_fn = jax.value_and_grad(compute_place_loss, has_aux=True)
+    (loss, success_rate), grads = grad_fn(state.params)
     state = state.apply_gradients(grads=grads)
 
     # update batch stats
     #state = state.replace(batch_stats=updates["batch_stats"])
 
     # update metrics (TODO: consider merging place components, currently storing metrics on query state)
-    metric_updates = state.metrics.single_from_model_output(loss=loss)
+    metric_updates = state.metrics.single_from_model_output(loss=loss, success_rate=success_rate)
     state = state.replace(metrics = state.metrics.merge(metric_updates))
 
-    return state, loss
+    return state, loss, success_rate
 
 if __name__ == "__main__":
     # read network config
